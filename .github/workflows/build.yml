@@ -1,0 +1,94 @@
+name: Build tss_poc LKM for OPlus ColorOS 6.1.75
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: 'Linux kernel version to build against'
+        required: true
+        default: '6.1.75'
+      target_vermagic:
+        description: 'Target vermagic string (exact match for device)'
+        required: true
+        default: '6.1.75-android14-11-o-g9c1e58b386f5 SMP preempt mod_unload modversions aarch64'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bc bison flex libssl-dev libelf-dev \
+            gcc-aarch64-linux-gnu wget xz-utils cpio kmod python3
+
+      - name: Cache kernel source + build artifacts
+        id: kcache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/linux-${{ github.event.inputs.kernel_version || '6.1.75' }}
+            /tmp/linux-${{ github.event.inputs.kernel_version || '6.1.75' }}.tar.xz
+          key: linux-${{ github.event.inputs.kernel_version || '6.1.75' }}-arm64-modules-prepare-v1
+
+      - name: Download Linux source
+        if: steps.kcache.outputs.cache-hit != 'true'
+        run: |
+          KV=${{ github.event.inputs.kernel_version || '6.1.75' }}
+          cd /tmp
+          wget -q --show-progress \
+            https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KV}.tar.xz
+          tar xf linux-${KV}.tar.xz
+
+      - name: Prepare modules (ARM64)
+        if: steps.kcache.outputs.cache-hit != 'true'
+        run: |
+          KV=${{ github.event.inputs.kernel_version || '6.1.75' }}
+          cd /tmp/linux-${KV}
+          make ARCH=arm64 defconfig
+          scripts/config -e CONFIG_MODULES -e CONFIG_KPROBES \
+                         -e CONFIG_KALLSYMS -e CONFIG_KALLSYMS_ALL \
+                         -e CONFIG_HAVE_HW_BREAKPOINT
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare -j$(nproc)
+
+      - name: Build tss_poc.ko
+        run: |
+          KV=${{ github.event.inputs.kernel_version || '6.1.75' }}
+          make KDIR=/tmp/linux-${KV} \
+               ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+          ls -la tss_poc.ko
+          file tss_poc.ko
+          modinfo tss_poc.ko | head -20
+
+      - name: Verify no __versions section (runtime-resolve only)
+        run: |
+          if aarch64-linux-gnu-readelf -S tss_poc.ko | grep -q '__versions'; then
+            echo "WARNING: __versions section present"
+            aarch64-linux-gnu-readelf -S tss_poc.ko | grep versions
+          else
+            echo "OK: no __versions section"
+          fi
+
+      - name: Patch vermagic to device-exact string
+        run: |
+          python3 patch_vermagic.py tss_poc.ko tss_poc.patched.ko \
+            "${{ github.event.inputs.target_vermagic || '6.1.75-android14-11-o-g9c1e58b386f5 SMP preempt mod_unload modversions aarch64' }}"
+          modinfo tss_poc.patched.ko | head -10
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tss_poc_${{ github.event.inputs.kernel_version || '6.1.75' }}_arm64
+          path: |
+            tss_poc.ko
+            tss_poc.patched.ko
+          retention-days: 7
