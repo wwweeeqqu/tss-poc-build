@@ -1,9 +1,5 @@
 /*
- * tss_poc.c — Minimal LKM PoC inspired by paradise.ko (game cheat carrier).
- *
- * Purpose: Verify that an out-of-tree LKM can load into stock OPlus ColorOS
- *          kernel 6.1.75-android14-11 using the vermagic-string trick +
- *          runtime kallsyms_lookup_name resolution (no Module.symvers needed).
+ * tss_poc.c — Minimal LKM PoC for OPlus ColorOS 6.1.75 (no UTS_RELEASE).
  */
 #define KBUILD_MODNAME "tss_poc"
 
@@ -11,7 +7,6 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
-#include <linux/version.h>
 
 static unsigned long (*tss_kallsyms_lookup_name)(const char *name) = NULL;
 
@@ -65,18 +60,18 @@ static int __init test_dynamic_lookup(void)
 static int __init tss_poc_init(void)
 {
     int ret;
-    pr_info("tss_poc: ===== loading on kernel %s =====\n", UTS_RELEASE);
+    pr_info("tss_poc: ===== loading =====\n");
     ret = resolve_kallsyms();
     if (ret) {
-        pr_err("tss_poc: cannot resolve kallsyms - aborting init\n");
+        pr_err("tss_poc: cannot resolve kallsyms - aborting\n");
         return ret;
     }
     ret = test_dynamic_lookup();
     if (ret) {
-        pr_err("tss_poc: dynamic lookup failed - aborting init\n");
+        pr_err("tss_poc: dynamic lookup failed - aborting\n");
         return ret;
     }
-    pr_info("tss_poc: ===== init complete, module loaded =====\n");
+    pr_info("tss_poc: ===== init complete =====\n");
     return 0;
 }
 
@@ -90,5 +85,5 @@ module_exit(tss_poc_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("tss_poc");
-MODULE_DESCRIPTION("Minimal LKM PoC for tss_sdk_decryptpacket hook research");
+MODULE_DESCRIPTION("Minimal LKM PoC");
 MODULE_VERSION("0.1");
