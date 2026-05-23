@@ -119,21 +119,16 @@ jobs:
           echo "--- patched init.rs (load_module_from_path lines) ---"
           grep -n -E "load_module_from_path|tss_dump" sukisu/userspace/ksuinit/src/init.rs
 
-      - name: Cross-build patched ksuinit (Rust + musl aarch64)
+      - name: Cross-build patched ksuinit (Rust + musl aarch64, self-contained crts)
         run: |
           source $HOME/.cargo/env
-          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=/opt/zig/zig-cc-aarch64-musl
-          # zig wrapper for linker
-          cat > /opt/zig/zig-cc-aarch64-musl <<'EOF'
-          #!/bin/sh
-          exec /opt/zig/zig cc -target aarch64-linux-musl "$@"
-          EOF
-          chmod +x /opt/zig/zig-cc-aarch64-musl
           cd sukisu
+          # Use Rust's built-in rust-lld + self-contained crts — no external linker needed
           cargo build --release --target aarch64-unknown-linux-musl -p ksuinit
           ls -la target/aarch64-unknown-linux-musl/release/ksuinit
           cp target/aarch64-unknown-linux-musl/release/ksuinit ../sukisu_ksuinit_patched
           file ../sukisu_ksuinit_patched
+          ls -la ../sukisu_ksuinit_patched
 
       - name: Patch tss_dump_min.ko vermagic
         run: |
