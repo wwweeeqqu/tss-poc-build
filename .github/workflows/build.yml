@@ -85,11 +85,19 @@ jobs:
             "${{ github.event.inputs.target_vermagic || '6.1.75-android14-11-o-g9c1e58b386f5 SMP preempt mod_unload modversions aarch64' }}"
           modinfo tss_poc.patched.ko | head -10
 
-      - name: Build user_loader (aarch64 static binary)
+      - name: Build user_loader + my_ksuinit (aarch64 static binaries)
         run: |
           aarch64-linux-gnu-gcc -static -O2 -o user_loader user_loader.c
-          file user_loader
-          aarch64-linux-gnu-readelf -h user_loader | head
+          aarch64-linux-gnu-gcc -static -O2 -o my_ksuinit my_ksuinit.c
+          file user_loader my_ksuinit
+          ls -la user_loader my_ksuinit
+
+      - name: Patch tss_dump_min.ko vermagic
+        run: |
+          ls -la tss_dump_min.ko
+          python3 patch_vermagic.py tss_dump_min.ko tss_dump_min.patched.ko \
+            "${{ github.event.inputs.target_vermagic || '6.1.75-android14-11-o-g9c1e58b386f5 SMP preempt mod_unload modversions aarch64' }}"
+          modinfo tss_dump_min.patched.ko | head -10
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -98,5 +106,8 @@ jobs:
           path: |
             tss_poc.ko
             tss_poc.patched.ko
+            tss_dump_min.ko
+            tss_dump_min.patched.ko
             user_loader
+            my_ksuinit
           retention-days: 7
