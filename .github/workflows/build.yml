@@ -119,11 +119,14 @@ jobs:
           echo "--- patched init.rs (load_module_from_path lines) ---"
           grep -n -E "load_module_from_path|tss_dump" sukisu/userspace/ksuinit/src/init.rs
 
-      - name: Cross-build patched ksuinit (Rust + musl aarch64, self-contained crts)
+      - name: Cross-build patched ksuinit (Rust + musl aarch64)
         run: |
           source $HOME/.cargo/env
           cd sukisu
-          # Use Rust's built-in rust-lld + self-contained crts — no external linker needed
+          # Use rust-lld (built into rustc) + Rust's self-contained crts
+          # Cargo default linker is `cc` (x86_64) which can't link aarch64 crts
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld
+          export RUSTFLAGS="-C linker-flavor=ld.lld -C link-self-contained=yes"
           cargo build --release --target aarch64-unknown-linux-musl -p ksuinit
           ls -la target/aarch64-unknown-linux-musl/release/ksuinit
           cp target/aarch64-unknown-linux-musl/release/ksuinit ../sukisu_ksuinit_patched
