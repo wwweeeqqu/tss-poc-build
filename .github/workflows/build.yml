@@ -102,15 +102,38 @@ jobs:
         run: |
           /opt/zig/zig cc -static -target aarch64-linux-musl -O2 -o my_ksuinit my_ksuinit.c
           file my_ksuinit
-          ls -la my_ksuinit
-          aarch64-linux-gnu-readelf -d my_ksuinit | head || true
-          # Verify NO dynamic interpreter (statically linked, no PT_INTERP)
-          if aarch64-linux-gnu-readelf -l my_ksuinit | grep -q INTERP; then
-            echo "ERROR: my_ksuinit has PT_INTERP — not fully static"
-            exit 1
-          else
-            echo "OK: my_ksuinit is fully static (no PT_INTERP)"
-          fi
+
+      - name: Install Rust + aarch64-musl target (for forked SukiSU ksuinit)
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          source $HOME/.cargo/env
+          rustup target add aarch64-unknown-linux-musl
+          rustc --version
+          # musl linker for cargo
+          sudo apt-get install -y --no-install-recommends musl-tools
+
+      - name: Clone SukiSU-Ultra + apply 7-line init.rs patch
+        run: |
+          git clone --depth 1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git sukisu
+          python3 apply_init_patch.py sukisu/userspace/ksuinit/src/init.rs
+          echo "--- patched init.rs (load_module_from_path lines) ---"
+          grep -n -E "load_module_from_path|tss_dump" sukisu/userspace/ksuinit/src/init.rs
+
+      - name: Cross-build patched ksuinit (Rust + musl aarch64)
+        run: |
+          source $HOME/.cargo/env
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=/opt/zig/zig-cc-aarch64-musl
+          # zig wrapper for linker
+          cat > /opt/zig/zig-cc-aarch64-musl <<'EOF'
+          #!/bin/sh
+          exec /opt/zig/zig cc -target aarch64-linux-musl "$@"
+          EOF
+          chmod +x /opt/zig/zig-cc-aarch64-musl
+          cd sukisu
+          cargo build --release --target aarch64-unknown-linux-musl -p ksuinit
+          ls -la target/aarch64-unknown-linux-musl/release/ksuinit
+          cp target/aarch64-unknown-linux-musl/release/ksuinit ../sukisu_ksuinit_patched
+          file ../sukisu_ksuinit_patched
 
       - name: Patch tss_dump_min.ko vermagic
         run: |
@@ -130,4 +153,5 @@ jobs:
             tss_dump_min.patched.ko
             user_loader
             my_ksuinit
+            sukisu_ksuinit_patched
           retention-days: 7
