@@ -103,13 +103,14 @@ jobs:
           /opt/zig/zig cc -static -target aarch64-linux-musl -O2 -o my_ksuinit my_ksuinit.c
           file my_ksuinit
 
-      - name: Install Rust + aarch64-musl target (for forked SukiSU ksuinit)
+      - name: Install Rust 1.93.0 + aarch64-musl target (match original SukiSU toolchain)
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          # Original SukiSU ksuinit was built with rustc 1.93.0 (per rabin2 -I)
+          # Using stable (1.95+) caused first-stage hang due to std lib behavior differences
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0 --profile minimal
           source $HOME/.cargo/env
           rustup target add aarch64-unknown-linux-musl
           rustc --version
-          # musl linker for cargo
           sudo apt-get install -y --no-install-recommends musl-tools
 
       - name: Clone SukiSU-Ultra + apply 7-line init.rs patch
