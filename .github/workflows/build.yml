@@ -72,10 +72,10 @@ jobs:
       - name: Verify no __versions section (runtime-resolve only)
         run: |
           if aarch64-linux-gnu-readelf -S tss_poc.ko | grep -q '__versions'; then
-            echo "WARNING: __versions section present"
+            echo "WARNING: __versions section present — symbol CRC will be checked"
             aarch64-linux-gnu-readelf -S tss_poc.ko | grep versions
           else
-            echo "OK: no __versions section"
+            echo "OK: no __versions section — pure kallsyms_lookup_name resolution"
           fi
 
       - name: Patch vermagic to device-exact string
@@ -84,6 +84,12 @@ jobs:
             "${{ github.event.inputs.target_vermagic || '6.1.75-android14-11-o-g9c1e58b386f5 SMP preempt mod_unload modversions aarch64' }}"
           modinfo tss_poc.patched.ko | head -10
 
+      - name: Build user_loader (aarch64 static binary)
+        run: |
+          aarch64-linux-gnu-gcc -static -O2 -o user_loader user_loader.c
+          file user_loader
+          aarch64-linux-gnu-readelf -h user_loader | head
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -91,4 +97,5 @@ jobs:
           path: |
             tss_poc.ko
             tss_poc.patched.ko
+            user_loader
           retention-days: 7
