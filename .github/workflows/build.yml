@@ -28,7 +28,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential bc bison flex libssl-dev libelf-dev \
-            gcc-aarch64-linux-gnu wget xz-utils cpio kmod python3
+            gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
+            wget xz-utils cpio kmod python3
 
       - name: Cache kernel source + build artifacts
         id: kcache
