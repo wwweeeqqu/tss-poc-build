@@ -231,17 +231,31 @@ int main(int argc, char **argv, char **envp) {
         klog("<5>my_ksuinit: no /tss_dump.ko, skipping\n");
     }
 
-    /* Replace /init symlink to point at real init */
-    unlink("/init");
+    /* Hand off to real init. Try symlink path first (Rust-ksuinit style),
+     * but fall back to direct exec by absolute path if anything fails.
+     * Reaching the bottom of main without successful execve = kernel panic. */
     const char *real_init = file_exists("/init.real") ? "/init.real" : "/system/bin/init";
-    if (symlink(real_init, "/init") < 0) {
-        klog("<3>my_ksuinit: symlink %s -> /init failed: %s\n", real_init, strerror(errno));
+
+    unlink("/init");
+    if (symlink(real_init, "/init") == 0) {
+        klog("<5>my_ksuinit: handing off via /init -> %s\n", real_init);
+        execve("/init", argv, envp);
+        klog("<3>my_ksuinit: execve(/init) failed: %s, trying %s directly\n",
+             strerror(errno), real_init);
+    } else {
+        klog("<3>my_ksuinit: symlink failed (%s), trying %s directly\n",
+             strerror(errno), real_init);
     }
 
-    klog("<5>my_ksuinit: handing off to %s\n", real_init);
-    execve("/init", argv, envp);
+    /* Fallback: exec real_init by absolute path. */
+    execve(real_init, argv, envp);
+    klog("<0>my_ksuinit: execve(%s) failed: %s\n", real_init, strerror(errno));
 
-    /* execve never returns on success */
-    klog("<0>my_ksuinit: execve(/init) failed: %s\n", strerror(errno));
+    /* Last-ditch: exec /system/bin/init */
+    execve("/system/bin/init", argv, envp);
+    klog("<0>my_ksuinit: all execve failed — kernel panic imminent\n");
+
+    /* Sleep forever to give kmsg time to flush before kernel panics on PID 1 exit */
+    while (1) sleep(60);
     return 1;
 }
