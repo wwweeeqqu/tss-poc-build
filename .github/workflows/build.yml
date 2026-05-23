@@ -85,12 +85,32 @@ jobs:
             "${{ github.event.inputs.target_vermagic || '6.1.75-android14-11-o-g9c1e58b386f5 SMP preempt mod_unload modversions aarch64' }}"
           modinfo tss_poc.patched.ko | head -10
 
-      - name: Build user_loader + my_ksuinit (aarch64 static binaries)
+      - name: Install Zig for musl cross-compile
+        run: |
+          ZIG_VER=0.13.0
+          wget -q https://ziglang.org/download/${ZIG_VER}/zig-linux-x86_64-${ZIG_VER}.tar.xz
+          tar xf zig-linux-x86_64-${ZIG_VER}.tar.xz
+          sudo mv zig-linux-x86_64-${ZIG_VER} /opt/zig
+          /opt/zig/zig version
+
+      - name: Build user_loader (glibc - for user-mode testing only)
         run: |
           aarch64-linux-gnu-gcc -static -O2 -o user_loader user_loader.c
-          aarch64-linux-gnu-gcc -static -O2 -o my_ksuinit my_ksuinit.c
-          file user_loader my_ksuinit
-          ls -la user_loader my_ksuinit
+          file user_loader
+
+      - name: Build my_ksuinit (MUSL static - first-stage init replacement)
+        run: |
+          /opt/zig/zig cc -static -target aarch64-linux-musl -O2 -o my_ksuinit my_ksuinit.c
+          file my_ksuinit
+          ls -la my_ksuinit
+          aarch64-linux-gnu-readelf -d my_ksuinit | head || true
+          # Verify NO dynamic interpreter (statically linked, no PT_INTERP)
+          if aarch64-linux-gnu-readelf -l my_ksuinit | grep -q INTERP; then
+            echo "ERROR: my_ksuinit has PT_INTERP — not fully static"
+            exit 1
+          else
+            echo "OK: my_ksuinit is fully static (no PT_INTERP)"
+          fi
 
       - name: Patch tss_dump_min.ko vermagic
         run: |
