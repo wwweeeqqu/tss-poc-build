@@ -6,22 +6,17 @@ on:
       - claude/upbeat-maxwell-MUZJm
   workflow_dispatch:
 
+# 需要写权限把构建产物推到 gh-pages 分支
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# 只保留一个并发部署，新推送会取消进行中的旧部署
 concurrency:
-  group: pages
+  group: pages-ghbranch
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dungeon-web
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,22 +30,22 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: dungeon-web
 
       - name: Build
         run: npm run build
+        working-directory: dungeon-web
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dungeon-web/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish dist to gh-pages branch
+        run: |
+          cd dungeon-web/dist
+          touch .nojekyll            # 关闭 Jekyll，避免忽略以 _ 开头的资源
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -q -b gh-pages
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
